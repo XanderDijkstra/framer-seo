@@ -1,0 +1,91 @@
+// Curated subset of CPV (Common Procurement Vocabulary) codes most relevant
+// to small Norwegian agencies. Full registry: https://simap.ted.europa.eu/cpv
+//
+// Picked to cover: web/IT, design, comms/PR, marketing, content, training,
+// translation, photo/film, consulting, research. Add more as needed —
+// these are just the chips shown in onboarding.
+export type CpvOption = { code: string; label: string; group: string };
+
+export const CPV_OPTIONS: CpvOption[] = [
+  // 72 — IT services
+  { code: "72000000", label: "IT-tjenester (overordnet)", group: "IT" },
+  { code: "72200000", label: "Programvareutvikling og rådgivning", group: "IT" },
+  { code: "72211000", label: "Programmeringstjenester for systemprogramvare", group: "IT" },
+  { code: "72212000", label: "Programmeringstjenester for applikasjonsprogramvare", group: "IT" },
+  { code: "72220000", label: "Systemkonsulenttjenester", group: "IT" },
+  { code: "72240000", label: "Systemanalyse og programmering", group: "IT" },
+  { code: "72250000", label: "System- og støttetjenester", group: "IT" },
+  { code: "72260000", label: "Programvarerelaterte tjenester", group: "IT" },
+  { code: "72261000", label: "Programvarestøtte", group: "IT" },
+  { code: "72262000", label: "Programvareutvikling (skreddersøm)", group: "IT" },
+  { code: "72263000", label: "Programvareinstallasjon", group: "IT" },
+  { code: "72267000", label: "Vedlikehold og reparasjon av programvare", group: "IT" },
+  { code: "72310000", label: "Databehandling", group: "IT" },
+  { code: "72320000", label: "Databasetjenester", group: "IT" },
+  { code: "72400000", label: "Internett-tjenester", group: "IT" },
+  { code: "72413000", label: "Webdesign", group: "IT" },
+  { code: "72414000", label: "Webportaltjenester", group: "IT" },
+  { code: "72415000", label: "Webhotell", group: "IT" },
+  { code: "72420000", label: "Internettutviklingstjenester", group: "IT" },
+  { code: "72500000", label: "Datatjenester (drift)", group: "IT" },
+  { code: "72600000", label: "Datasupport og rådgivning", group: "IT" },
+  { code: "72611000", label: "Teknisk støtte for datasystemer", group: "IT" },
+
+  // 79 — Forretningstjenester (business services)
+  { code: "79341000", label: "Reklametjenester", group: "Markedsføring" },
+  { code: "79341100", label: "Reklamerådgivning", group: "Markedsføring" },
+  { code: "79341200", label: "Reklamekampanjer", group: "Markedsføring" },
+  { code: "79341400", label: "Reklamekampanjetjenester", group: "Markedsføring" },
+  { code: "79342000", label: "Markedsføringstjenester", group: "Markedsføring" },
+  { code: "79342100", label: "Direkte markedsføring", group: "Markedsføring" },
+  { code: "79342200", label: "Salgsfremmende tjenester", group: "Markedsføring" },
+  { code: "79342300", label: "Kundeservice", group: "Markedsføring" },
+  { code: "79340000", label: "Reklame- og markedsføringstjenester", group: "Markedsføring" },
+  { code: "79416000", label: "Public relations-tjenester", group: "Kommunikasjon" },
+  { code: "79416100", label: "Tjenester for håndtering av offentlige forhold", group: "Kommunikasjon" },
+  { code: "79416200", label: "Rådgivning innen public relations", group: "Kommunikasjon" },
+  { code: "79822500", label: "Grafisk design", group: "Design" },
+  { code: "79822000", label: "Sats og trykksaker", group: "Design" },
+  { code: "79823000", label: "Trykk- og leveringstjenester", group: "Design" },
+  { code: "79961000", label: "Fototjenester", group: "Foto/Film" },
+  { code: "79961100", label: "Reklamefotografering", group: "Foto/Film" },
+  { code: "79961300", label: "Spesialfotografering", group: "Foto/Film" },
+  { code: "79952000", label: "Eventtjenester", group: "Event" },
+  { code: "79952100", label: "Kulturarrangementer", group: "Event" },
+  { code: "79530000", label: "Oversettelsestjenester", group: "Innhold" },
+  { code: "79540000", label: "Tolketjenester", group: "Innhold" },
+  { code: "79552000", label: "Tekstbehandlingstjenester", group: "Innhold" },
+  { code: "79553000", label: "Desktop publishing", group: "Innhold" },
+  { code: "79420000", label: "Ledelsesrelaterte tjenester", group: "Rådgivning" },
+  { code: "79410000", label: "Ledelses- og forretningsrådgivning", group: "Rådgivning" },
+  { code: "79411000", label: "Generell rådgivning", group: "Rådgivning" },
+  { code: "79411100", label: "Forretningsutviklingsrådgivning", group: "Rådgivning" },
+  { code: "79412000", label: "Finansiell ledelsesrådgivning", group: "Rådgivning" },
+  { code: "79413000", label: "Markedsføringsrådgivning", group: "Rådgivning" },
+  { code: "79414000", label: "HR-rådgivning", group: "Rådgivning" },
+  { code: "79415000", label: "Produksjonsrådgivning", group: "Rådgivning" },
+  { code: "79311000", label: "Undersøkelser", group: "Rådgivning" },
+  { code: "79311100", label: "Utforming av spørreundersøkelser", group: "Rådgivning" },
+  { code: "79311200", label: "Spørreundersøkelser", group: "Rådgivning" },
+  { code: "79311300", label: "Undersøkelsesanalyse", group: "Rådgivning" },
+  { code: "79320000", label: "Markedsundersøkelser", group: "Rådgivning" },
+  { code: "79330000", label: "Statistiske tjenester", group: "Rådgivning" },
+
+  // 92 — Recreational, cultural and sporting services (relevant for content/film)
+  { code: "92110000", label: "Filmproduksjon", group: "Foto/Film" },
+  { code: "92111000", label: "Produksjon av kino- og videofilm", group: "Foto/Film" },
+  { code: "92111200", label: "Produksjon av reklame-, propaganda- og informasjonsfilm", group: "Foto/Film" },
+  { code: "92112000", label: "Filmproduksjonstjenester", group: "Foto/Film" },
+
+  // 80 — Education and training
+  { code: "80500000", label: "Opplæringstjenester", group: "Opplæring" },
+  { code: "80510000", label: "Spesialisert opplæring", group: "Opplæring" },
+  { code: "80511000", label: "Personalopplæring", group: "Opplæring" },
+  { code: "80531200", label: "Teknisk opplæring", group: "Opplæring" },
+  { code: "80533000", label: "Datakurs", group: "Opplæring" },
+
+  // 73 — Research and development
+  { code: "73210000", label: "Forskning og utvikling", group: "Forskning" },
+  { code: "73220000", label: "Utviklingsrådgivning", group: "Forskning" },
+  { code: "73300000", label: "Forsknings- og utviklingstjenester", group: "Forskning" },
+];

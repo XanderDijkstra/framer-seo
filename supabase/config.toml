@@ -1,0 +1,10 @@
+project_id = "doffin-whisperer"
+
+[functions.scrape-doffin]
+verify_jwt = false
+
+[functions.score-notices]
+verify_jwt = false
+
+[functions.run-pipeline]
+verify_jwt = false
