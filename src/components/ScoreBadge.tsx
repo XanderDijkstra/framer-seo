@@ -49,7 +49,8 @@ export function ActionBadge({
     REVIEW: "bg-warning/20 text-warning-foreground",
     SKIP: "bg-muted text-muted-foreground",
   } as const;
-  const label = action === "BID" ? "BUD" : action === "REVIEW" ? "VURDER" : "HOPP OVER";
+  const label =
+    action === "BID" ? "BUD" : action === "REVIEW" ? "VURDER" : "HOPP OVER";
   return (
     <span
       className={cn(

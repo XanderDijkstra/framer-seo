@@ -1,108 +1,114 @@
 # Doffin Whisperer
 
-Multi-tenant SaaS that triages Norwegian public-procurement tenders from
-[Doffin](https://doffin.no) into a `BID / REVIEW / SKIP` inbox per company.
+Single-tenant Next.js app that pulls Norwegian public-procurement tenders from
+[Doffin](https://doffin.no) and triages them into a `BID / REVIEW / SKIP`
+inbox. Stack: **Next.js 15 (App Router) + Neon Postgres + Drizzle ORM +
+Vercel Cron**, with Google Gemini for scoring via the Lovable AI Gateway.
 
-> **Scope of this commit:** scrape + score only. Proposal generation, exports,
-> document uploads, and digest emails are intentionally not included yet —
-> we want the matching to feel right before adding writing tools on top.
-
-## Stack
-
-- React 18 + Vite + TypeScript + Tailwind v3 (handwritten shadcn-style primitives).
-- Supabase (Postgres + Auth + Edge Functions).
-- Google Gemini via the Lovable AI Gateway (`google/gemini-3-flash-preview`).
+> No auth yet — first run drops you into onboarding to fill the company
+> profile, after that the app shows the dashboard. Add Auth.js later when
+> you go multi-user.
 
 ## Setup
 
-1. **Create the Supabase project**, then locally:
+1. **Create a Neon project** at <https://console.neon.tech> and grab the
+   pooled connection string (looks like `postgres://user:pwd@host.neon.tech/db?sslmode=require`).
+
+2. **Configure env vars**:
+
+   ```sh
+   cp .env.example .env.local
+   # Fill in DATABASE_URL, DOFFIN_API_KEY, LOVABLE_API_KEY, CRON_SECRET
+   ```
+
+3. **Push the schema**:
 
    ```sh
    bun install
-   cp .env.example .env.local   # fill in VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+   bun run db:push        # creates company_profile, notices, scores in Neon
    ```
 
-2. **Run the migration** (`supabase/migrations/20260510000000_init.sql`) — either
-   with `supabase db push` after `supabase link`, or paste it into the SQL editor.
-
-3. **Set edge function secrets** — these are server-only, never bundled:
+4. **Run it**:
 
    ```sh
-   supabase secrets set DOFFIN_API_KEY=...
-   supabase secrets set LOVABLE_API_KEY=...
-   # SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set automatically by Supabase
+   bun run dev
+   # http://localhost:3000  →  redirects to /onboarding on first run
    ```
 
-4. **Deploy the edge functions**:
+## Deploy
 
-   ```sh
-   supabase functions deploy scrape-doffin
-   supabase functions deploy score-notices
-   supabase functions deploy run-pipeline
-   ```
-
-5. **Wire the daily cron** (run once in the SQL editor — replace `<project-ref>`):
-
-   ```sql
-   create extension if not exists pg_cron;
-   create extension if not exists pg_net;
-
-   select cron.schedule(
-     'doffin-pipeline-daily',
-     '0 6 * * *',
-     $$
-       select net.http_post(
-         url:='https://<project-ref>.supabase.co/functions/v1/run-pipeline',
-         headers:='{"Content-Type":"application/json"}'::jsonb,
-         body:='{}'::jsonb
-       );
-     $$
-   );
-   ```
-
-6. **Run the app**:
-
-   ```sh
-   bun dev
-   ```
+1. Push this repo to GitHub and import it in Vercel.
+2. Set the same env vars in the Vercel project (Production + Preview).
+3. `vercel.json` already registers a daily cron at 06:00 UTC hitting
+   `/api/cron/daily`. The cron handler honours the per-company schedule
+   (daily / weekly).
 
 ## How it works
 
-- Sign up → `handle_new_user` trigger creates a profile row.
-- Onboarding wizard collects services, CPV codes, keywords, regions, budget.
-  `create_company_for_current_user` RPC creates the company atomically and
-  links the profile.
-- `scrape-doffin` aggregates CPV codes and keywords across **every** company
-  profile (Doffin data is public, so the cache is shared) and inserts new
-  notices into `public.notices`.
-- `score-notices` finds notices that haven't been scored for each company,
-  pre-skips anything matching `penalty_keywords`, and otherwise asks Gemini
-  to score on five dimensions and recommend `BID/REVIEW/SKIP`.
-- `run-pipeline` chains the above and is what both the dashboard button and
-  pg_cron invoke.
+```
+        ┌────────────────┐
+        │  Vercel Cron   │  daily 06:00 UTC
+        └───────┬────────┘
+                │
+                ▼
+   /api/cron/daily ──▶ scrapeDoffin() ──▶ Neon (notices)
+                ▼
+                └─▶ scoreNoticesBatch() × up to 5  ──▶ Neon (scores)
+```
 
-## Doffin gotchas baked in
-
-- `searchString` does not honour `OR`. We make one HTTP request per keyword.
-- `cpvCode` is a repeatable param. We pass all CPV codes in one request.
-- Pagination is 1-indexed.
-- Edge functions cap at ~60s on free tier — `score-notices` only handles
-  10 notices per company per call; `run-pipeline` loops up to 5 times.
+- **`src/lib/doffin.ts`** — aggregates CPV codes + keywords from the company
+  profile and queries Doffin v2. Mitigates the no-`OR` quirk by issuing one
+  request per keyword, dedupes by id, inserts only new rows.
+- **`src/lib/score.ts`** — pulls the next 10 unscored notices, pre-skips
+  anything matching `penalty_keywords`, otherwise asks Gemini to score on five
+  dimensions and recommend `BID/REVIEW/SKIP`.
+- **`/api/pipeline/run`** — manual orchestrator (the dashboard's "Kjør
+  pipeline" button). Loops scoring up to 5×.
+- **`/api/cron/daily`** — what Vercel Cron hits. Same body, but rejects
+  non-`Bearer $CRON_SECRET` callers and respects `pipeline_schedule`.
 
 ## Project layout
 
 ```
 src/
-  components/         AppShell, ProtectedRoute, ScoreBadge, ui primitives
-  hooks/useAuth.tsx
-  lib/                supabase client, api helpers, CPV / region / service lists
-  pages/              Auth, Onboarding, Dashboard, NoticeDetail, Settings
-supabase/
-  config.toml         verify_jwt=false on all 3 functions
-  migrations/         schema + RLS + trigger + RPC
-  functions/
-    _shared/          cors + service client + keyword matcher
-    scrape-doffin/
-    score-notices/
-    run-pipeline/
+  app/
+    layout.tsx              global shell, fonts, toaster, react-query
+    page.tsx                redirects to /onboarding if no company yet, else <Dashboard />
+    onboarding/page.tsx     first-run profile setup
+    settings/page.tsx       edit profile + pipeline frequency
+    notice/[id]/page.tsx    detail view with score bars + reasons / red flags
+    api/
+      company/              GET, POST, PATCH the singleton profile
+      notices/              GET list, GET one, POST favorite toggle
+      pipeline/             scrape, score, run (manual)
+      scores/reset          wipe scores so the next run re-scores everything
+      cron/daily            Vercel Cron entry point (CRON_SECRET-protected)
+  components/               AppShell, Dashboard, CompanyForm, ScoreBadge, ui/*
+  lib/
+    db.ts                   Neon HTTP driver + drizzle
+    schema.ts               company_profile, notices, scores
+    doffin.ts               server-only scraper
+    score.ts                server-only Gemini scoring + clearAllScores
+    keywords.ts             penalty matcher
+    cpv-codes.ts            curated CPV chip list
+    services.ts             curated service chip list
+    regions.ts              Norwegian regions
+    api-client.ts           thin typed fetch wrapper for the React Query layer
+drizzle/                    Drizzle migrations (generated; check in)
+vercel.json                 cron config
 ```
+
+## Doffin gotchas baked in
+
+- `searchString` does not honour `OR`. We make one HTTP request per keyword.
+- `cpvCode` is repeatable. We pass all CPV codes in one request.
+- Pagination is 1-indexed.
+- Vercel Functions cap at 60s on Hobby (300s on Pro for cron). We score 10
+  notices per call and loop up to 5×.
+
+## Adding auth later
+
+Drop in **Auth.js v5** with the Drizzle adapter, add `users` and `accounts`
+tables, scope `company_profile.id` to a user (or to a tenant), and re-add
+the `company_id` foreign key on `scores`. The data model is already shaped
+for this — `notices` stays shared, `scores` becomes per-user.

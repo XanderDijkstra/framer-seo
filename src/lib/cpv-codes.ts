@@ -1,9 +1,5 @@
 // Curated subset of CPV (Common Procurement Vocabulary) codes most relevant
 // to small Norwegian agencies. Full registry: https://simap.ted.europa.eu/cpv
-//
-// Picked to cover: web/IT, design, comms/PR, marketing, content, training,
-// translation, photo/film, consulting, research. Add more as needed —
-// these are just the chips shown in onboarding.
 export type CpvOption = { code: string; label: string; group: string };
 
 export const CPV_OPTIONS: CpvOption[] = [
@@ -71,20 +67,20 @@ export const CPV_OPTIONS: CpvOption[] = [
   { code: "79320000", label: "Markedsundersøkelser", group: "Rådgivning" },
   { code: "79330000", label: "Statistiske tjenester", group: "Rådgivning" },
 
-  // 92 — Recreational, cultural and sporting services (relevant for content/film)
+  // 92 — Foto/Film
   { code: "92110000", label: "Filmproduksjon", group: "Foto/Film" },
   { code: "92111000", label: "Produksjon av kino- og videofilm", group: "Foto/Film" },
   { code: "92111200", label: "Produksjon av reklame-, propaganda- og informasjonsfilm", group: "Foto/Film" },
   { code: "92112000", label: "Filmproduksjonstjenester", group: "Foto/Film" },
 
-  // 80 — Education and training
+  // 80 — Opplæring
   { code: "80500000", label: "Opplæringstjenester", group: "Opplæring" },
   { code: "80510000", label: "Spesialisert opplæring", group: "Opplæring" },
   { code: "80511000", label: "Personalopplæring", group: "Opplæring" },
   { code: "80531200", label: "Teknisk opplæring", group: "Opplæring" },
   { code: "80533000", label: "Datakurs", group: "Opplæring" },
 
-  // 73 — Research and development
+  // 73 — Forskning
   { code: "73210000", label: "Forskning og utvikling", group: "Forskning" },
   { code: "73220000", label: "Utviklingsrådgivning", group: "Forskning" },
   { code: "73300000", label: "Forsknings- og utviklingstjenester", group: "Forskning" },
