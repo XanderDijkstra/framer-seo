@@ -1,13 +1,43 @@
 import "server-only";
+import Anthropic from "@anthropic-ai/sdk";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { z } from "zod";
 import { desc, notInArray } from "drizzle-orm";
 import { db, schema } from "./db";
 import { matchesPenalty } from "./keywords";
 import type { CompanyProfile, Notice } from "./schema";
 
-const LOVABLE_ENDPOINT =
-  "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-3-flash-preview";
+// Haiku 4.5 — fast, cheap, plenty of headroom for a five-dimension JSON
+// classification. Bump to claude-sonnet-4-6 if recall starts to bite.
+const MODEL = "claude-haiku-4-5";
 export const SCORE_BATCH_SIZE = 10;
+
+const ScoreSchema = z.object({
+  relevance: z.number().min(0).max(10),
+  size_fit: z.number().min(0).max(10),
+  win_probability: z.number().min(0).max(10),
+  geography_fit: z.number().min(0).max(10),
+  deadline_comfort: z.number().min(0).max(10),
+  composite: z.number().min(0).max(10),
+  category: z.string(),
+  summary_no: z.string(),
+  reasons_to_bid: z.array(z.string()),
+  red_flags: z.array(z.string()),
+  recommended_action: z.enum(["BID", "REVIEW", "SKIP"]),
+});
+
+type ScorePayload = z.infer<typeof ScoreSchema>;
+
+let _client: Anthropic | null = null;
+function client() {
+  if (!_client) {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error("ANTHROPIC_API_KEY env var missing");
+    }
+    _client = new Anthropic();
+  }
+  return _client;
+}
 
 function systemPrompt(c: CompanyProfile) {
   return `You are a tender scoring assistant for a small Norwegian agency.
@@ -37,14 +67,7 @@ CATEGORY: One short Norwegian label (2-3 words) like "Kommunikasjon & PR", "Webu
 Composite formula:
 (relevance × 0.30) + (size_fit × 0.25) + (win_probability × 0.15) + (geography_fit × 0.15) + (deadline_comfort × 0.15)
 
-Return ONLY valid JSON, no prose, no markdown:
-{
-  "relevance": number, "size_fit": number, "win_probability": number,
-  "geography_fit": number, "deadline_comfort": number, "composite": number,
-  "category": "string", "summary_no": "string (one sentence in Norwegian)",
-  "reasons_to_bid": ["string","string"], "red_flags": ["string"],
-  "recommended_action": "BID" | "REVIEW" | "SKIP"
-}`;
+summary_no must be one sentence in Norwegian. recommended_action is "BID", "REVIEW", or "SKIP".`;
 }
 
 function userPrompt(notice: Notice, c: CompanyProfile) {
@@ -75,43 +98,23 @@ Deadline: ${notice.deadline ?? "n/a"}
 CPV codes: ${cpvList}${extras}`;
 }
 
-function stripFences(s: string) {
-  return s
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-}
-
-async function callGemini(system: string, user: string): Promise<unknown> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("LOVABLE_API_KEY missing");
-  const res = await fetch(LOVABLE_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
+async function callClaude(
+  system: string,
+  user: string,
+): Promise<ScorePayload> {
+  const response = await client().messages.parse({
+    model: MODEL,
+    max_tokens: 2048,
+    system,
+    messages: [{ role: "user", content: user }],
+    output_config: { format: zodOutputFormat(ScoreSchema) },
   });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(`Gemini HTTP ${res.status}: ${txt.slice(0, 300)}`);
+  if (!response.parsed_output) {
+    throw new Error(
+      `No parsed output from Claude (stop_reason=${response.stop_reason})`,
+    );
   }
-  const json = await res.json();
-  const content: string = json?.choices?.[0]?.message?.content ?? "";
-  return JSON.parse(stripFences(content));
-}
-
-function numOrNull(v: unknown): number | null {
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
+  return response.parsed_output;
 }
 
 export type ScoreBatchResult = {
@@ -126,7 +129,6 @@ export async function scoreNoticesBatch(): Promise<ScoreBatchResult> {
     return { scored: 0, skipped: 0, errors: 0 };
   }
 
-  // Find notices that don't have a score yet, newest first.
   const scoredRows = await db
     .select({ id: schema.scores.noticeId })
     .from(schema.scores);
@@ -186,36 +188,24 @@ export async function scoreNoticesBatch(): Promise<ScoreBatchResult> {
     }
 
     try {
-      const parsed = (await callGemini(
+      const parsed = await callClaude(
         systemPrompt(company),
         userPrompt(notice, company),
-      )) as Record<string, unknown>;
-
-      const action = parsed.recommended_action;
-      const validAction =
-        action === "BID" || action === "REVIEW" || action === "SKIP"
-          ? action
-          : "REVIEW";
+      );
 
       const values = {
         noticeId: notice.id,
-        relevance: numOrNull(parsed.relevance),
-        sizeFit: numOrNull(parsed.size_fit),
-        winProbability: numOrNull(parsed.win_probability),
-        geographyFit: numOrNull(parsed.geography_fit),
-        deadlineComfort: numOrNull(parsed.deadline_comfort),
-        composite: numOrNull(parsed.composite),
-        category:
-          typeof parsed.category === "string" ? parsed.category : null,
-        summaryNo:
-          typeof parsed.summary_no === "string" ? parsed.summary_no : null,
-        reasonsToBid: Array.isArray(parsed.reasons_to_bid)
-          ? (parsed.reasons_to_bid as string[])
-          : [],
-        redFlags: Array.isArray(parsed.red_flags)
-          ? (parsed.red_flags as string[])
-          : [],
-        recommendedAction: validAction as "BID" | "REVIEW" | "SKIP",
+        relevance: parsed.relevance,
+        sizeFit: parsed.size_fit,
+        winProbability: parsed.win_probability,
+        geographyFit: parsed.geography_fit,
+        deadlineComfort: parsed.deadline_comfort,
+        composite: parsed.composite,
+        category: parsed.category,
+        summaryNo: parsed.summary_no,
+        reasonsToBid: parsed.reasons_to_bid,
+        redFlags: parsed.red_flags,
+        recommendedAction: parsed.recommended_action,
       };
 
       await db
@@ -240,11 +230,21 @@ export async function scoreNoticesBatch(): Promise<ScoreBatchResult> {
         });
       scored++;
     } catch (err) {
-      console.error(
-        "[score] LLM error for",
-        notice.id,
-        err instanceof Error ? err.message : String(err),
-      );
+      if (err instanceof Anthropic.APIError) {
+        console.error(
+          "[score] Anthropic",
+          err.status,
+          err.message,
+          "for",
+          notice.id,
+        );
+      } else {
+        console.error(
+          "[score] error for",
+          notice.id,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
       errors++;
     }
   }
@@ -252,7 +252,6 @@ export async function scoreNoticesBatch(): Promise<ScoreBatchResult> {
   return { scored, skipped, errors };
 }
 
-// Wipe all existing scores so the next batch starts fresh.
 export async function clearAllScores(): Promise<void> {
   await db.delete(schema.scores);
 }

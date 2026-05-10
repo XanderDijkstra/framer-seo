@@ -3,7 +3,7 @@
 Single-tenant Next.js app that pulls Norwegian public-procurement tenders
 from [Doffin](https://doffin.no) and triages them into a `BID / REVIEW / SKIP`
 inbox. Stack: **Next.js 15 + Neon Postgres + Drizzle + Vercel Cron**, with
-Google Gemini for scoring via the Lovable AI Gateway.
+Claude Haiku 4.5 (via the official Anthropic SDK) for scoring.
 
 > Designed to run **entirely in the cloud** — no local install needed.
 > You ship code from your editor / GitHub web UI / Claude Code, Vercel
@@ -23,7 +23,7 @@ Google Gemini for scoring via the Lovable AI Gateway.
 - Go to <https://vercel.com/new> → **Import Git Repository** → pick this repo.
 - On the import screen, expand **Environment Variables** and add the three runtime keys (descriptions in [Env vars](#env-vars) below):
   - `DOFFIN_API_KEY`
-  - `LOVABLE_API_KEY`
+  - `ANTHROPIC_API_KEY`
   - `CRON_SECRET` (any random string, e.g. `openssl rand -hex 32` or just type 32 random characters)
 - Click **Deploy**. The first build will fail with `DATABASE_URL is not set` — that's expected; we add it in step 3.
 
@@ -48,7 +48,7 @@ Google Gemini for scoring via the Lovable AI Gateway.
 | ----------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`    | Set automatically by Neon × Vercel integration | Pooled connection string. Don't set it by hand.                                                                                       |
 | `DOFFIN_API_KEY`  | Vercel project env vars        | Doffin v2 API subscription key (`Ocp-Apim-Subscription-Key`). Apply at <https://www.doffin.no/>.                                       |
-| `LOVABLE_API_KEY` | Vercel project env vars        | Lovable AI Gateway API key. Calls `google/gemini-3-flash-preview` via the OpenAI-compatible endpoint at `ai.gateway.lovable.dev`. |
+| `ANTHROPIC_API_KEY` | Vercel project env vars        | Anthropic API key. Used to score tenders with Claude Haiku 4.5 via the official `@anthropic-ai/sdk`. Get one at <https://console.anthropic.com/settings/keys>. |
 | `CRON_SECRET`     | Vercel project env vars        | Any random string. Vercel Cron sends it as `Authorization: Bearer …`; the `/api/cron/daily` handler rejects anything else.            |
 
 `.env.example` lists the same set if you ever do want to run locally.
@@ -84,7 +84,7 @@ Neon before the new code goes live.
 ```
 
 - **`src/lib/doffin.ts`** — aggregates CPV codes + keywords from the company profile and queries Doffin v2. Mitigates the no-`OR` quirk by issuing one request per keyword, dedupes by id, inserts only new rows.
-- **`src/lib/score.ts`** — pulls the next 10 unscored notices, pre-skips anything matching `penalty_keywords`, otherwise asks Gemini to score on five dimensions and recommend `BID / REVIEW / SKIP`.
+- **`src/lib/score.ts`** — pulls the next 10 unscored notices, pre-skips anything matching `penalty_keywords`, otherwise asks Claude Haiku 4.5 (via `client.messages.parse()` with a Zod schema) to score on five dimensions and recommend `BID / REVIEW / SKIP`.
 - **`/api/pipeline/run`** — manual orchestrator that the dashboard's "Kjør pipeline" button calls. Loops scoring up to 5×.
 - **`/api/cron/daily`** — what Vercel Cron hits. Same body, but rejects non-`Bearer $CRON_SECRET` callers and respects `pipeline_schedule`.
 
